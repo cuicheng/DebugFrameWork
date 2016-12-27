@@ -21,4 +21,13 @@ extern NSString * const kLastUncaughtExceptionName;
 void HandleException(NSException *exception);
 void SignalHandler(int signal);
 void InstallUncaughtExceptionHandler(void);
+/*
+ if([[NSFileManager defaultManager] fileExistsAtPath:[NSHomeDirectory() stringByAppendingPathComponent:@"Documents/appCrash.txt"]]){
+ NSString *error = [[NSString alloc] initWithContentsOfFile:[NSHomeDirectory() stringByAppendingPathComponent:@"Documents/appCrash.txt"] encoding:NSUTF8StringEncoding error:nil];
+ //post 日志
+ 
+ }else{
+ 
+ }
+ */
 @end

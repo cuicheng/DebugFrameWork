@@ -7,6 +7,7 @@
 //
 
 #import "UncaughtExceptionHandler.h"
+#import "CCDebug.h"
 #include <libkern/OSAtomic.h>
 #include <execinfo.h>
 #import <AudioToolbox/AudioToolbox.h>
@@ -14,7 +15,7 @@
 #define ENABLELOG true
 #import <CoreTelephony/CTCarrier.h>
 #import <CoreTelephony/CTTelephonyNetworkInfo.h>
-
+#import "Data.h"
 #define USER_LOG_LEN 1000 //保存异常信息时补充的用户打印log长度
 
 //http://www.cocoachina.com/newbie/tutorial/2012/0829/4672.html
@@ -32,38 +33,6 @@ const NSInteger UncaughtExceptionHandlerSkipAddressCount = 4;
 const NSInteger UncaughtExceptionHandlerReportAddressCount = 5;
 
 @implementation UncaughtExceptionHandler
--(NSString *)getInfo
-{
-    NSMutableString *infoStr=[[NSMutableString alloc] init];
-    UIDevice *device = [[UIDevice alloc] init];
-    NSString *name = device.name;       //获取设备所有者的名称
-    NSString *model = device.model;      //获取设备的类别
-    NSString *type = device.localizedModel; //获取本地化版本
-    NSString *systemName = device.systemName;   //获取当前运行的系统
-    NSString *systemVersion = device.systemVersion;//获取当前系统的版本
-    NSString *identifier = [[[UIDevice currentDevice] identifierForVendor] UUIDString];
-    [infoStr appendFormat:@"所有者:%@,类别:%@,版本:%@,系统:%@,系统版本:%@,UUID:%@",name,model,type,systemName,systemVersion,identifier];
-    
-   CTTelephonyNetworkInfo *info = [[CTTelephonyNetworkInfo alloc] init];
-    CTCarrier *carrier = [info subscriberCellularProvider];
-    NSString *mCarrier = [NSString stringWithFormat:@"%@",[carrier carrierName]];
-    [infoStr appendFormat:@",运营商:%@",mCarrier];
-//
-    NSString *mConnectType = [[NSString alloc] initWithFormat:@"%@",info.currentRadioAccessTechnology];
-    NSDictionary *netDic=@{CTRadioAccessTechnologyGPRS:@"介于2G和3G之间，也叫2.5G ,过度技术",
-                           CTRadioAccessTechnologyEdge:@"EDGE为GPRS到第三代移动通信的过渡，EDGE俗称2.75G",
-                           CTRadioAccessTechnologyWCDMA:@"WCDMA",
-                           CTRadioAccessTechnologyHSDPA:@"亦称为3.5G(3?G)",
-                           CTRadioAccessTechnologyHSUPA:@"3G到4G的过度技术",
-                           CTRadioAccessTechnologyCDMA1x:@"3G",
-                           CTRadioAccessTechnologyCDMAEVDORev0:@"3G标准",
-                           CTRadioAccessTechnologyCDMAEVDORevA:@"CDMAEVDORevA",
-                           CTRadioAccessTechnologyCDMAEVDORevB:@"CDMAEVDORevB",
-                           CTRadioAccessTechnologyeHRPD:@"电信使用的一种3G到4G的演进技术， 3.75G",
-                           CTRadioAccessTechnologyLTE:@"接近4G"};
-    [infoStr appendFormat:@",网络:%@",[netDic objectForKey:mConnectType]];
-    return infoStr;
-}
 + (NSArray *)backtrace
 {
     void* callstack[128];
@@ -104,7 +73,7 @@ const NSInteger UncaughtExceptionHandlerReportAddressCount = 5;
 }
 - (void)handleException:(NSException *)exception
 {
-    AudioServicesPlaySystemSound (kSystemSoundID_Vibrate) ;
+    AudioServicesPlaySystemSound (kSystemSoundID_Vibrate);
     
 	[self validateAndSaveCriticalApplicationData];
     
@@ -118,14 +87,29 @@ const NSInteger UncaughtExceptionHandlerReportAddressCount = 5;
     NSString *strException = [NSString stringWithFormat:@"异常原因如下:\n%@\n%@\n%@",
                               [exception reason],
                               [[exception userInfo] objectForKey:UncaughtExceptionHandlerAddressesKey],strSymbols];
-    NSLog(@"%@",strException);
+    CCLog(@"APP崩溃:%@",strException);
+    
+    NSString *postStr=[[NSMutableString alloc] initWithString:CCReturnDebug(@"%@",strException)];
+    [postStr stringByAppendingFormat:@"\n\n\n\n设备信息：%@",[GetInfo getIphoneInfo]];
+    [postStr stringByAppendingFormat:@"\n\n\n\n当时网络信息:%@",[GetInfo getWifiInfo]];
+    if([[NSFileManager defaultManager] fileExistsAtPath:[NSHomeDirectory() stringByAppendingPathComponent:@"Documents/appCrash.txt"]]){
+        NSMutableString *ss= [[NSMutableString alloc] initWithContentsOfFile:[NSHomeDirectory() stringByAppendingPathComponent:@"Documents/appCrash.txt"] encoding:NSUTF8StringEncoding error:nil];
+        [ss appendString:postStr];
+        [ss writeToFile:[NSHomeDirectory() stringByAppendingPathComponent:@"Documents/appCrash.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    }else{
+        [postStr writeToFile:[NSHomeDirectory() stringByAppendingPathComponent:@"Documents/appCrash.txt"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+    }
+    
+    
     NSString *saveExceptionPath = [self getSaveExceptionPath];
-    //NSLog(@"strSymbols:%@",strSymbols);
     [strException writeToFile:saveExceptionPath atomically:NO encoding:NSUTF8StringEncoding error:nil];
     [[NSUserDefaults standardUserDefaults] setValue:saveExceptionPath forKey:kLastUncaughtException];
     [[NSUserDefaults standardUserDefaults] synchronize];
     
-    UIAlertController *avc=[UIAlertController alertControllerWithTitle:@"程序出现异常" message:[NSString stringWithFormat:@"%@%@",strException,[self getInfo]] preferredStyle:UIAlertControllerStyleAlert];
+
+    
+    
+    UIAlertController *avc=[UIAlertController alertControllerWithTitle:@"很抱歉，程序出现异常" message:@"错误信息已发送，谢谢您的使用" preferredStyle:UIAlertControllerStyleAlert];
     
     UIAlertAction *sure=[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
         dismissed=YES;
